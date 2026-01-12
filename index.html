@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>森の時 | 專注計時</title>
+    <!-- 字體 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome 圖標 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* * MUJI x 護眼配色方案 (正式版)
+         */
+        :root {
+            --bg-paper: #D8E6D6;       /* 專注時：清新的豆沙綠 */
+            --bg-rest: #EBE7DC;        /* 休息時：溫暖的米灰色 */
+
+            --text-charcoal: #405244;  /* 深墨綠色 */
+            --text-rest: #8B5E3C;      /* 休息時：茶褐色 */
+            
+            --footer-text: #6e7c70;    /* 頁尾文字色 (融合了灰色與綠色) */
+
+            --accent-green: #6A8A73;   
+            --btn-border: #5F7A68;
+        }
+
+        body {
+            background-color: var(--bg-paper);
+            color: var(--text-charcoal);
+            font-family: 'Noto Serif TC', serif;
+            transition: background-color 1.5s ease, color 1.5s ease;
+            touch-action: manipulation; /* 優化觸控 */
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body.rest-mode {
+            background-color: var(--bg-rest);
+            color: var(--text-rest);
+        }
+
+        /* 休息模式下的元素顏色變化 */
+        body.rest-mode .timer-display { color: var(--text-rest); }
+        body.rest-mode .btn-muji { border-color: var(--text-rest); color: var(--text-rest); }
+        body.rest-mode #status-text { color: var(--text-rest); opacity: 0.8; }
+        body.rest-mode footer { color: var(--text-rest); opacity: 0.7; }
+        body.rest-mode footer a { color: var(--text-rest); }
+
+        /* 按鈕樣式 */
+        .btn-muji {
+            border: 1px solid var(--btn-border);
+            background: rgba(255, 255, 255, 0.3);
+            color: var(--text-charcoal);
+            padding: 0.6rem 2rem;
+            border-radius: 4px;
+            transition: all 0.5s ease;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            font-size: 1.1rem;
+            -webkit-tap-highlight-color: transparent;
+            cursor: pointer;
+        }
+
+        .btn-muji:active { transform: scale(0.98); background: rgba(255,255,255,0.5); }
+        .btn-muji:hover { background: rgba(255,255,255,0.4); }
+
+        .timer-display {
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.05em;
+            text-shadow: 1px 1px 0px rgba(255,255,255,0.2);
+            transition: color 1.5s ease;
+        }
+
+        /* 進度條 */
+        .progress-container {
+            width: 100%;
+            height: 3px;
+            background-color: rgba(0,0,0,0.05);
+            margin-top: 2rem;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: var(--accent-green);
+            width: 0%;
+            transition: width 1s linear, background-color 1.5s ease;
+        }
+
+        /* SVG 動畫類 */
+        .plant-path { transition: all 1s ease; }
+
+        .leaf {
+            fill: var(--accent-green);
+            transform-origin: bottom center;
+            opacity: 0;
+            transition: opacity 1s ease, transform 1s ease;
+        }
+
+        /* 花朵動畫 */
+        .flower {
+            fill: #FDFDFD;
+            stroke: none;
+            opacity: 0;
+            transform-origin: center center;
+            transition: opacity 2s ease, transform 2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* 熱茶蒸氣動畫 */
+        @keyframes steam-rise {
+            0% { transform: translateY(0) scale(1); opacity: 0; }
+            20% { opacity: 0.6; }
+            80% { opacity: 0; }
+            100% { transform: translateY(-15px) scale(1.2); opacity: 0; }
+        }
+
+        .steam {
+            fill: none;
+            stroke: #fff;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            opacity: 0;
+            animation: steam-rise 3s infinite ease-out;
+        }
+        .steam:nth-child(1) { animation-delay: 0s; }
+        .steam:nth-child(2) { animation-delay: 1.5s; }
+
+        /* 茶杯淡入淡出 */
+        #tea-cup {
+            transition: opacity 1.5s ease;
+            opacity: 0;
+        }
+
+        /* Footer 樣式微調 (配合主題) */
+        footer a {
+            color: var(--footer-text);
+            transition: color 0.3s ease;
+            text-decoration: none;
+        }
+        footer a:hover {
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center overflow-hidden relative">
+
+    <!-- 頂部裝飾 -->
+    <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-green-800/10 to-transparent"></div>
+
+    <main class="z-10 flex flex-col items-center w-full max-w-md px-6">
+        
+        <header class="text-center mb-6">
+            <h1 class="text-2xl font-light tracking-[0.2em] mb-2 opacity-90">森の時</h1>
+            <p id="status-text" class="text-sm font-medium opacity-60 tracking-widest transition-colors duration-1000">點擊開始喚醒種子</p>
+        </header>
+
+        <!-- 主視覺區 -->
+        <div class="w-80 h-64 relative mb-4 flex justify-center items-end opacity-90">
+            <svg viewBox="0 0 200 160" class="w-full h-full overflow-visible">
+                
+                <!-- 背景：遠山 (靜態) -->
+                <path d="M-20 160 L40 100 L110 160 Z" fill="#C5D6C8" opacity="0.6" />
+                <path d="M80 160 L150 90 L220 160 Z" fill="#BCC8BA" opacity="0.5" />
+
+                <!-- 地面線 -->
+                <line x1="20" y1="160" x2="180" y2="160" stroke="#8C9E90" stroke-width="2" opacity="0.6" stroke-linecap="round"/>
+                
+                <!-- 植物 (中間) -->
+                <g id="plant-group">
+                    <!-- 莖 -->
+                    <line id="stem" x1="100" y1="160" x2="100" y2="160" stroke="#5F7A68" stroke-width="3.5" stroke-linecap="round" />
+                    <!-- 葉子 -->
+                    <g id="leaves-group">
+                        <path class="leaf" id="leaf-1" d="M100 140 Q80 130 70 145 Q85 150 100 140" />
+                        <path class="leaf" id="leaf-2" d="M100 120 Q120 110 130 125 Q115 130 100 120" />
+                        <path class="leaf" id="leaf-3" d="M100 95 Q70 80 60 100 Q80 110 100 95" />
+                        <path class="leaf" id="leaf-4" d="M100 70 Q130 55 140 75 Q120 85 100 70" />
+                        <circle class="leaf" id="leaf-top" cx="100" cy="45" r="7" fill="#8DAF98" />
+                    </g>
+                    <!-- 花朵 -->
+                    <g id="flowers-group">
+                        <circle class="flower" id="flower-1" cx="100" cy="45" r="5" />
+                        <circle class="flower" id="flower-2" cx="96" cy="42" r="3" />
+                        <circle class="flower" id="flower-3" cx="104" cy="42" r="3" />
+                        <circle class="flower" id="flower-4" cx="70" cy="145" r="3" />
+                        <circle class="flower" id="flower-5" cx="130" cy="125" r="3" />
+                        <circle class="flower" id="flower-6" cx="60" cy="100" r="3" />
+                        <circle class="flower" id="flower-7" cx="140" cy="75" r="2.5" />
+                    </g>
+                </g>
+
+                <!-- 綠茶與杯子 (右側) -->
+                <g id="tea-cup" transform="translate(140, 142)">
+                    <path d="M0 0 L2 15 Q10 18 18 15 L20 0 Z" fill="#FDFDFD" stroke="#8C9E90" stroke-width="1"/>
+                    <path d="M3 2 L17 2 L16 4 L4 4 Z" fill="#A8C66C" />
+                    <path class="steam" d="M6 -2 Q10 -8 6 -12" />
+                    <path class="steam" d="M14 -2 Q10 -8 14 -12" />
+                </g>
+            </svg>
+        </div>
+
+        <!-- 計時顯示 -->
+        <div class="timer-display text-7xl font-light text-green-900/80 mb-10 transition-colors duration-1000" id="timer">
+            25:00
+        </div>
+
+        <!-- 按鈕 -->
+        <div class="flex space-x-6">
+            <button id="btn-toggle" class="btn-muji">開始</button>
+            <button id="btn-reset" class="btn-muji border-opacity-50">重置</button>
+        </div>
+
+        <!-- 進度條 -->
+        <div class="progress-container">
+            <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        
+        <div class="mt-4 text-xs font-medium tracking-wider text-center opacity-40" style="color: var(--footer-text)">
+            25min 專注 ↔ 5min 休憩
+        </div>
+
+        <!-- Footer -->
+        <footer style="margin-top:24px; text-align:center; font-size:14px; transition: color 1.5s ease; color: var(--footer-text);">
+            <div style="margin-top:10px; font-size:12px; opacity: 0.8;">
+              © 2026 Christina Yu. All rights reserved.
+            </div>
+            <div style="margin-top:10px; font-size:12px; display: flex; justify-content: center; gap: 15px;">
+              <a href="mailto:mamahowma@gmail.com"><i class="fa-solid fa-envelope fa-xl fa-fw"></i></a>
+              <a href="https://www.facebook.com/mamahowma" target="_blank"><i class="fa-brands fa-facebook fa-xl fa-fw"></i></a>
+              <a href="https://portaly.cc/mamahowma/support" target="_blank"><i class="fa-solid fa-mug-hot fa-xl fa-fw"></i></a>
+            </div>
+        </footer>
+    </main>
+
+    <script>
+        // --- 設定 (正式版) ---
+        const WORK_TIME = 25 * 60; // 25 分鐘
+        const BREAK_TIME = 5 * 60; // 5 分鐘
+        
+        let timeLeft = WORK_TIME;
+        let isWorkMode = true;
+        let isRunning = false;
+        let timerId = null;
+        let audioCtx = null;
+
+        // DOM 元素
+        const timerDisplay = document.getElementById('timer');
+        const statusText = document.getElementById('status-text');
+        const btnToggle = document.getElementById('btn-toggle');
+        const btnReset = document.getElementById('btn-reset');
+        const progressBar = document.getElementById('progress-bar');
+        const body = document.body;
+        
+        // SVG 元素
+        const stem = document.getElementById('stem');
+        const teaCup = document.getElementById('tea-cup');
+        const leaves = [
+            document.getElementById('leaf-1'),
+            document.getElementById('leaf-2'),
+            document.getElementById('leaf-3'),
+            document.getElementById('leaf-4'),
+            document.getElementById('leaf-top')
+        ];
+        const flowers = [
+            document.getElementById('flower-1'),
+            document.getElementById('flower-2'),
+            document.getElementById('flower-3'),
+            document.getElementById('flower-4'),
+            document.getElementById('flower-5'),
+            document.getElementById('flower-6'),
+            document.getElementById('flower-7')
+        ];
+
+        // --- 音效系統 ---
+        function initAudioContext() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            // 靜音喚醒 (iOS/Android 兼容)
+            const buffer = audioCtx.createBuffer(1, 1, 22050);
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            source.start(0);
+        }
+
+        // 播放 Kalimba (休息開始)
+        function playKalimba() {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime;
+            // C Major Arpeggio: C5, E5, G5, C6, E6
+            const notes = [
+                { f: 523.25, d: 0 }, { f: 659.25, d: 0.15 }, { f: 783.99, d: 0.3 },
+                { f: 1046.50, d: 0.45 }, { f: 1318.51, d: 0.7 }
+            ];
+            notes.forEach(note => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = note.f;
+                const start = t + note.d;
+                gain.gain.setValueAtTime(0, start);
+                gain.gain.linearRampToValueAtTime(0.5, start + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.01, start + 1.5);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(start);
+                osc.stop(start + 2.0);
+            });
+        }
+
+        // 播放 學校鐘聲 (專注開始)
+        function playSchoolBell() {
+            if (!audioCtx) return;
+            const t = audioCtx.currentTime;
+            // Mi-Do-Re-So
+            const melody = [
+                { f: 659.25, t: 0 }, { f: 523.25, t: 0.6 },
+                { f: 587.33, t: 1.2 }, { f: 392.00, t: 1.8 }
+            ];
+            melody.forEach(m => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.value = m.f;
+                const start = t + m.t;
+                gain.gain.setValueAtTime(0, start);
+                gain.gain.linearRampToValueAtTime(0.15, start + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.001, start + 1.5);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(start);
+                osc.stop(start + 2.0);
+            });
+        }
+
+        // --- 視覺與邏輯 ---
+        function updateVisuals() {
+            const totalTime = isWorkMode ? WORK_TIME : BREAK_TIME;
+            const progress = (totalTime - timeLeft) / totalTime; 
+
+            progressBar.style.width = `${progress * 100}%`;
+            progressBar.style.backgroundColor = isWorkMode ? 'var(--accent-green)' : '#8B5E3C';
+
+            if (isWorkMode) {
+                // 生長模式
+                const currentStemY = 160 - (115 * progress); 
+                stem.setAttribute('y2', currentStemY);
+
+                // 隱藏休息元素
+                teaCup.style.opacity = 0;
+                flowers.forEach(f => {
+                    f.style.opacity = 0;
+                    f.style.transform = 'scale(0)';
+                });
+
+                // 葉子隨進度出現
+                leaves.forEach((leaf, index) => {
+                    const threshold = (index + 1) * 0.18;
+                    if (progress > threshold) {
+                        leaf.style.opacity = 1;
+                        leaf.style.transform = 'scale(1)';
+                    } else {
+                        leaf.style.opacity = 0;
+                        leaf.style.transform = 'scale(0)';
+                    }
+                });
+                body.classList.remove('rest-mode');
+            } else {
+                // 休息模式
+                stem.setAttribute('y2', 45); // 全長
+                teaCup.style.opacity = 1;    // 茶杯
+
+                // 葉子全開
+                leaves.forEach(l => {
+                    l.style.opacity = 1;
+                    l.style.transform = 'scale(1)';
+                });
+
+                // 花朵綻放
+                flowers.forEach((f, i) => {
+                    setTimeout(() => {
+                        f.style.opacity = 1;
+                        f.style.transform = 'scale(1)';
+                    }, i * 100);
+                });
+
+                body.classList.add('rest-mode');
+            }
+        }
+
+        function formatTime(s) {
+            const min = Math.floor(s / 60);
+            const sec = s % 60;
+            return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+        }
+
+        function tick() {
+            if (timeLeft > 0) {
+                timeLeft--;
+                timerDisplay.textContent = formatTime(timeLeft);
+                updateVisuals();
+            } else {
+                switchMode();
+            }
+        }
+
+        function switchMode() {
+            isWorkMode = !isWorkMode;
+            timeLeft = isWorkMode ? WORK_TIME : BREAK_TIME;
+            
+            if (isWorkMode) {
+                statusText.textContent = "專注生長";
+                document.title = "森の時 | 專注";
+                playSchoolBell(); 
+            } else {
+                statusText.textContent = "喝口茶，休憩片刻";
+                document.title = "森の時 | 休憩";
+                playKalimba(); 
+            }
+            updateVisuals();
+            timerDisplay.textContent = formatTime(timeLeft);
+        }
+
+        // --- 事件監聽 ---
+        btnToggle.addEventListener('click', function() {
+            initAudioContext();
+            if (isRunning) {
+                clearInterval(timerId);
+                btnToggle.textContent = "繼續";
+                statusText.textContent = "暫停中";
+            } else {
+                timerId = setInterval(tick, 1000);
+                btnToggle.textContent = "暫停";
+                statusText.textContent = isWorkMode ? "專注生長" : "喝口茶，休憩片刻";
+            }
+            isRunning = !isRunning;
+        });
+
+        btnReset.addEventListener('click', function() {
+            clearInterval(timerId);
+            isRunning = false;
+            isWorkMode = true;
+            timeLeft = WORK_TIME;
+            
+            btnToggle.textContent = "開始";
+            statusText.textContent = "點擊開始喚醒種子";
+            timerDisplay.textContent = formatTime(timeLeft);
+            
+            // 重置視覺
+            teaCup.style.opacity = 0;
+            stem.setAttribute('y2', 160);
+            leaves.forEach(l => {
+                l.style.opacity = 0;
+                l.style.transform = 'scale(0)';
+            });
+            flowers.forEach(f => {
+                f.style.opacity = 0;
+                f.style.transform = 'scale(0)';
+            });
+
+            progressBar.style.width = '0%';
+            body.classList.remove('rest-mode');
+            document.title = "森の時 | 專注計時";
+        });
+
+        // 初始載入
+        updateVisuals();
+    </script>
+</body>
+</html>
