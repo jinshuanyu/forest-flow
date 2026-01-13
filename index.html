@@ -239,6 +239,11 @@
         const WORK_TIME = 25 * 60; // 25 分鐘
         const BREAK_TIME = 5 * 60; // 5 分鐘
         
+        // 基於時間戳的計時變數 (解決背景計時不準問題)
+        let startTime = null;      // 開始計時的時間戳
+        let pausedTime = 0;        // 暫停時剩餘的秒數
+        let totalDuration = WORK_TIME; // 當前階段總時長
+        
         let timeLeft = WORK_TIME;
         let isWorkMode = true;
         let isRunning = false;
@@ -342,8 +347,7 @@
 
         // --- 視覺與邏輯 ---
         function updateVisuals() {
-            const totalTime = isWorkMode ? WORK_TIME : BREAK_TIME;
-            const progress = (totalTime - timeLeft) / totalTime; 
+            const progress = (totalDuration - timeLeft) / totalDuration; 
 
             progressBar.style.width = `${progress * 100}%`;
             progressBar.style.backgroundColor = isWorkMode ? 'var(--accent-green)' : '#8B5E3C';
@@ -401,19 +405,33 @@
             return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
         }
 
+        // 修改 tick 函數：使用時間戳計算（確保背景計時準確）
         function tick() {
+            if (!startTime) {
+                startTime = Date.now();
+            }
+            
+            // 計算已經過的時間（秒）
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            timeLeft = totalDuration - elapsed;
+            
             if (timeLeft > 0) {
-                timeLeft--;
                 timerDisplay.textContent = formatTime(timeLeft);
                 updateVisuals();
             } else {
+                // 時間到，切換模式
+                timeLeft = 0;
+                timerDisplay.textContent = formatTime(0);
+                updateVisuals();
                 switchMode();
             }
         }
 
         function switchMode() {
             isWorkMode = !isWorkMode;
-            timeLeft = isWorkMode ? WORK_TIME : BREAK_TIME;
+            totalDuration = isWorkMode ? WORK_TIME : BREAK_TIME;
+            timeLeft = totalDuration;
+            startTime = Date.now(); // 重置起始時間
             
             if (isWorkMode) {
                 statusText.textContent = "專注生長";
@@ -432,10 +450,16 @@
         btnToggle.addEventListener('click', function() {
             initAudioContext();
             if (isRunning) {
+                // 暫停
                 clearInterval(timerId);
+                pausedTime = timeLeft; // 記錄暫停時剩餘時間
+                startTime = null;      // 清除起始時間
                 btnToggle.textContent = "繼續";
                 statusText.textContent = "暫停中";
             } else {
+                // 開始/繼續
+                totalDuration = pausedTime || (isWorkMode ? WORK_TIME : BREAK_TIME);
+                startTime = Date.now(); // 重新開始計時
                 timerId = setInterval(tick, 1000);
                 btnToggle.textContent = "暫停";
                 statusText.textContent = isWorkMode ? "專注生長" : "喝口茶，休憩片刻";
@@ -448,6 +472,11 @@
             isRunning = false;
             isWorkMode = true;
             timeLeft = WORK_TIME;
+            
+            // 重置時間戳相關變數
+            startTime = null;
+            pausedTime = 0;
+            totalDuration = WORK_TIME;
             
             btnToggle.textContent = "開始";
             statusText.textContent = "點擊開始喚醒種子";
