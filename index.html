@@ -352,24 +352,6 @@
             });
         }
 
-        // 播放結束鈴聲
-        function playFinishSound() {
-            if (!audioCtx) return;
-            const t = audioCtx.currentTime;
-            // Simple ding sound
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'sine';
-            osc.frequency.value = 800;
-            gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(0.3, t + 0.01);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 1);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start(t);
-            osc.stop(t + 1.5);
-        }
-
         // --- 視覺與邏輯 ---
         function updateVisuals() {
             const progress = (totalDuration - timeLeft) / totalDuration; 
@@ -443,14 +425,34 @@
                 timerDisplay.textContent = formatTime(timeLeft);
                 updateVisuals();
             } else {
-                // 時間到，停止計時並播放音效
+                // 時間到，自動切換到下一個模式
                 timeLeft = 0;
                 timerDisplay.textContent = formatTime(0);
                 updateVisuals();
-                stopTimer();
-                playFinishSound();
-                statusText.textContent = isWorkMode ? "工作時段結束！" : "休息時段結束！";
+                switchMode();
             }
+        }
+
+        function switchMode() {
+            // 切換模式
+            isWorkMode = !isWorkMode;
+            totalDuration = isWorkMode ? WORK_TIME : BREAK_TIME;
+            timeLeft = totalDuration;
+            startTime = Date.now(); // 重置起始時間
+            
+            // 更新 UI 和播放音效
+            if (isWorkMode) {
+                statusText.textContent = "專注生長中...";
+                document.title = "森の時 | 專注工作";
+                playSchoolBell(); 
+            } else {
+                statusText.textContent = "喝口茶，休憩片刻";
+                document.title = "森の時 | 休息中";
+                playKalimba(); 
+            }
+            
+            updateVisuals();
+            timerDisplay.textContent = formatTime(timeLeft);
         }
 
         function startTimer(workMode) {
@@ -500,7 +502,15 @@
         }
 
         function resetTimer() {
-            stopTimer();
+            // 停止計時器
+            if (timerId) {
+                clearInterval(timerId);
+                timerId = null;
+            }
+            isRunning = false;
+            startTime = null;
+            
+            // 重置為工作模式
             isWorkMode = true;
             timeLeft = WORK_TIME;
             totalDuration = WORK_TIME;
