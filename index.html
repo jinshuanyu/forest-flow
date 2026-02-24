@@ -83,7 +83,7 @@
             width: 100%;
             height: 3px;
             background-color: rgba(0,0,0,0.05);
-            margin-top: 2rem;
+            margin-top: 1rem;
             border-radius: 2px;
             overflow: hidden;
         }
@@ -172,13 +172,13 @@
 
     <main class="z-10 flex flex-col items-center w-full max-w-md px-6 mx-auto flex-1 justify-center">
         
-        <header class="text-center mb-3 md:mb-6">
+        <header class="text-center mb-2">
             <h1 class="text-2xl font-light tracking-[0.2em] mb-2 opacity-90">Steep</h1>
             <p id="status-text" class="text-sm font-medium opacity-60 tracking-widest transition-colors duration-1000">選擇工作或休息模式</p>
         </header>
 
         <!-- 主視覺區 -->
-        <div class="w-60 h-48 md:w-80 md:h-64 relative mb-2 md:mb-4 flex justify-center items-end opacity-90">
+        <div class="w-52 h-36 md:w-64 md:h-40 relative mb-1 flex justify-center items-end opacity-90">
             <svg viewBox="0 0 200 160" class="w-full h-full overflow-visible">
                 
                 <!-- 背景：遠山 (靜態) -->
@@ -223,7 +223,7 @@
         </div>
 
         <!-- 計時顯示 -->
-        <div class="timer-display text-5xl md:text-7xl font-light text-green-900/80 mb-6 md:mb-10 transition-colors duration-1000" id="timer">
+        <div class="timer-display text-5xl md:text-6xl font-light text-green-900/80 mb-4 md:mb-6 transition-colors duration-1000" id="timer">
             25:00
         </div>
 
@@ -239,7 +239,7 @@
             <div id="progress-bar" class="progress-bar"></div>
         </div>
         
-        <div class="mt-4 text-xs font-medium tracking-wider text-center opacity-40" style="color: var(--footer-text)">
+        <div class="mt-2 text-xs font-medium tracking-wider text-center opacity-40" style="color: var(--footer-text)">
             25min 專注 ↔ 5min 休憩
         </div>
         <p class="bg-status" id="bg-status"></p>
