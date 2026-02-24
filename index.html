@@ -148,6 +148,21 @@
         footer a:hover {
             opacity: 0.7;
         }
+
+        /* 背景模式狀態指示 */
+        .bg-status {
+            font-size: 11px;
+            margin-top: 6px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            text-align: center;
+        }
+        .bg-status.active {
+            opacity: 0.5;
+        }
+        body.rest-mode .bg-status.active {
+            color: var(--text-rest);
+        }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col items-center justify-center overflow-hidden relative">
@@ -227,6 +242,7 @@
         <div class="mt-4 text-xs font-medium tracking-wider text-center opacity-40" style="color: var(--footer-text)">
             25min 專注 ↔ 5min 休憩
         </div>
+        <p class="bg-status" id="bg-status"></p>
 
         <!-- Footer -->
         <footer style="margin-top:24px; text-align:center; font-size:14px; transition: color 1.5s ease; color: var(--footer-text);">
@@ -242,29 +258,36 @@
     </main>
 
     <script>
-        // --- 設定 (正式版) ---
-        const WORK_TIME = 25 * 60; // 25 分鐘
-        const BREAK_TIME = 5 * 60; // 5 分鐘
-        
-        // 基於時間戳的計時變數
-        let startTime = null;      // 開始計時的時間戳
-        let totalDuration = WORK_TIME; // 當前階段總時長
-        
+        // === 設定 ===
+        const WORK_TIME = 25 * 60;
+        const BREAK_TIME = 5 * 60;
+
+        // === 計時器狀態 ===
+        let startTime = null;
+        let endTime = null;          // 新增：預計結束時間（ms）
+        let totalDuration = WORK_TIME;
         let timeLeft = WORK_TIME;
         let isWorkMode = true;
         let isRunning = false;
         let timerId = null;
         let audioCtx = null;
 
-        // DOM 元素
+        // === 背景保活狀態 ===
+        let wakeLock = null;
+        let silentAudioElement = null;
+        let keepAliveOsc = null;
+        let keepAliveGain = null;
+
+        // === DOM 元素 ===
         const timerDisplay = document.getElementById('timer');
         const statusText = document.getElementById('status-text');
         const btnWork = document.getElementById('btn-work');
         const btnRest = document.getElementById('btn-rest');
         const btnReset = document.getElementById('btn-reset');
         const progressBar = document.getElementById('progress-bar');
+        const bgStatus = document.getElementById('bg-status');
         const body = document.body;
-        
+
         // SVG 元素
         const stem = document.getElementById('stem');
         const teaCup = document.getElementById('tea-cup');
@@ -285,7 +308,7 @@
             document.getElementById('flower-7')
         ];
 
-        // --- 音效系統 ---
+        // === 音效系統 ===
         function initAudioContext() {
             if (!audioCtx) {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -302,11 +325,10 @@
             source.start(0);
         }
 
-        // 播放 Kalimba (休息開始)
         function playKalimba() {
             if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             const t = audioCtx.currentTime;
-            // C Major Arpeggio: C5, E5, G5, C6, E6
             const notes = [
                 { f: 523.25, d: 0 }, { f: 659.25, d: 0.15 }, { f: 783.99, d: 0.3 },
                 { f: 1046.50, d: 0.45 }, { f: 1318.51, d: 0.7 }
@@ -327,11 +349,10 @@
             });
         }
 
-        // 播放 學校鐘聲 (專注開始)
         function playSchoolBell() {
             if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
             const t = audioCtx.currentTime;
-            // Mi-Do-Re-So
             const melody = [
                 { f: 659.25, t: 0 }, { f: 523.25, t: 0.6 },
                 { f: 587.33, t: 1.2 }, { f: 392.00, t: 1.8 }
@@ -352,26 +373,102 @@
             });
         }
 
-        // --- 視覺與邏輯 ---
+        // === 背景保活：靜音音訊循環 ===
+        // 播放近乎無聲的音訊，防止手機瀏覽器暫停頁面
+        function startSilentAudio() {
+            if (!audioCtx) return;
+
+            // 方法 1：Web Audio API 靜音振盪器
+            try {
+                if (!keepAliveOsc) {
+                    keepAliveOsc = audioCtx.createOscillator();
+                    keepAliveGain = audioCtx.createGain();
+                    keepAliveOsc.frequency.value = 1;      // 1 Hz，聽不到
+                    keepAliveGain.gain.value = 0.001;       // 近乎無聲
+                    keepAliveOsc.connect(keepAliveGain);
+                    keepAliveGain.connect(audioCtx.destination);
+                    keepAliveOsc.start();
+                }
+            } catch (e) {}
+
+            // 方法 2：HTML5 Audio 靜音循環（iOS Safari 更可靠）
+            try {
+                if (!silentAudioElement) {
+                    silentAudioElement = new Audio(
+                        'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRBqmAAAAAAD/+1DEAAAHAAGf9AAAIgAANIAAAASqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq//tQxBOAAADSAAAAAAAAANIAAAASqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo='
+                    );
+                    silentAudioElement.loop = true;
+                    silentAudioElement.volume = 0.01;
+                    silentAudioElement.play().catch(() => {});
+                }
+            } catch (e) {}
+        }
+
+        function stopSilentAudio() {
+            if (keepAliveOsc) {
+                try { keepAliveOsc.stop(); keepAliveOsc.disconnect(); } catch (e) {}
+                keepAliveOsc = null;
+                keepAliveGain = null;
+            }
+            if (silentAudioElement) {
+                silentAudioElement.pause();
+                silentAudioElement.src = '';
+                silentAudioElement = null;
+            }
+        }
+
+        // === Wake Lock API（防止螢幕休眠）===
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    wakeLock.addEventListener('release', () => { wakeLock = null; });
+                } catch (e) {}
+            }
+        }
+
+        function releaseWakeLock() {
+            if (wakeLock) {
+                wakeLock.release();
+                wakeLock = null;
+            }
+        }
+
+        // === Web 通知 ===
+        function requestNotificationPermission() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }
+
+        function sendNotification(title, notifBody) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    const n = new Notification(title, {
+                        body: notifBody,
+                        tag: 'forest-flow-timer',
+                        requireInteraction: true
+                    });
+                    setTimeout(() => n.close(), 10000);
+                } catch (e) {}
+            }
+        }
+
+        // === 視覺更新 ===
         function updateVisuals() {
-            const progress = (totalDuration - timeLeft) / totalDuration; 
+            const progress = (totalDuration - timeLeft) / totalDuration;
 
             progressBar.style.width = `${progress * 100}%`;
             progressBar.style.backgroundColor = isWorkMode ? 'var(--accent-green)' : '#8B5E3C';
 
             if (isWorkMode) {
-                // 生長模式
-                const currentStemY = 160 - (115 * progress); 
+                const currentStemY = 160 - (115 * progress);
                 stem.setAttribute('y2', currentStemY);
-
-                // 隱藏休息元素
                 teaCup.style.opacity = 0;
                 flowers.forEach(f => {
                     f.style.opacity = 0;
                     f.style.transform = 'scale(0)';
                 });
-
-                // 葉子隨進度出現
                 leaves.forEach((leaf, index) => {
                     const threshold = (index + 1) * 0.18;
                     if (progress > threshold) {
@@ -384,24 +481,18 @@
                 });
                 body.classList.remove('rest-mode');
             } else {
-                // 休息模式
-                stem.setAttribute('y2', 45); // 全長
-                teaCup.style.opacity = 1;    // 茶杯
-
-                // 葉子全開
+                stem.setAttribute('y2', 45);
+                teaCup.style.opacity = 1;
                 leaves.forEach(l => {
                     l.style.opacity = 1;
                     l.style.transform = 'scale(1)';
                 });
-
-                // 花朵綻放
                 flowers.forEach((f, i) => {
                     setTimeout(() => {
                         f.style.opacity = 1;
                         f.style.transform = 'scale(1)';
                     }, i * 100);
                 });
-
                 body.classList.add('rest-mode');
             }
         }
@@ -412,66 +503,91 @@
             return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
         }
 
+        // === 核心計時邏輯（背景感知）===
         function tick() {
-            if (!startTime) {
-                startTime = Date.now();
-            }
-            
-            // 計算已經過的時間（秒）
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            timeLeft = totalDuration - elapsed;
-            
-            if (timeLeft > 0) {
+            if (!endTime) return;
+
+            const now = Date.now();
+            const remaining = Math.ceil((endTime - now) / 1000);
+
+            if (remaining > 0) {
+                timeLeft = remaining;
                 timerDisplay.textContent = formatTime(timeLeft);
                 updateVisuals();
             } else {
-                // 時間到，自動切換到下一個模式
+                // 時間到（可能在背景中已經結束）
                 timeLeft = 0;
                 timerDisplay.textContent = formatTime(0);
                 updateVisuals();
-                switchMode();
+                handleTimerEnd();
             }
         }
 
-        function switchMode() {
+        function handleTimerEnd() {
+            const now = Date.now();
+
             // 切換模式
             isWorkMode = !isWorkMode;
             totalDuration = isWorkMode ? WORK_TIME : BREAK_TIME;
             timeLeft = totalDuration;
-            startTime = Date.now(); // 重置起始時間
-            
-            // 更新 UI 和播放音效
+            startTime = now;
+            endTime = now + totalDuration * 1000;
+
             if (isWorkMode) {
                 statusText.textContent = "專注生長中...";
                 document.title = "森の時 | 專注工作";
-                playSchoolBell(); 
+                playSchoolBell();
+                sendNotification('森の時 — 休息結束', '回來專注吧！開始 25 分鐘工作。');
             } else {
                 statusText.textContent = "喝口茶，休憩片刻";
                 document.title = "森の時 | 休息中";
-                playKalimba(); 
+                playKalimba();
+                sendNotification('森の時 — 工作完成', '辛苦了！休息 5 分鐘吧。');
             }
-            
+
             updateVisuals();
             timerDisplay.textContent = formatTime(timeLeft);
         }
 
+        // === Page Visibility API：從背景回來時追上進度 ===
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && isRunning) {
+                // 立即更新計時器狀態
+                tick();
+
+                // 恢復音訊
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+                startSilentAudio();
+                requestWakeLock();
+
+                bgStatus.textContent = '已從背景恢復';
+                bgStatus.classList.add('active');
+                setTimeout(() => {
+                    if (isRunning) bgStatus.textContent = '背景模式運作中';
+                }, 2000);
+            }
+        });
+
+        // === 計時器控制 ===
         function startTimer(workMode) {
-            // 初始化音效
             initAudioContext();
-            
-            // 停止現有計時器
+            requestNotificationPermission();
+
             if (timerId) {
                 clearInterval(timerId);
             }
-            
-            // 設定模式
+
             isWorkMode = workMode;
             totalDuration = workMode ? WORK_TIME : BREAK_TIME;
             timeLeft = totalDuration;
-            startTime = Date.now();
+
+            const now = Date.now();
+            startTime = now;
+            endTime = now + totalDuration * 1000;
             isRunning = true;
-            
-            // 更新 UI
+
             if (workMode) {
                 statusText.textContent = "專注生長中...";
                 document.title = "森の時 | 專注工作";
@@ -481,14 +597,18 @@
                 document.title = "森の時 | 休息中";
                 playKalimba();
             }
-            
-            // 更新按鈕狀態
+
             updateButtonStates();
-            
-            // 開始計時
             updateVisuals();
             timerDisplay.textContent = formatTime(timeLeft);
             timerId = setInterval(tick, 1000);
+
+            // 啟動背景保活
+            startSilentAudio();
+            requestWakeLock();
+
+            bgStatus.textContent = '背景模式運作中';
+            bgStatus.classList.add('active');
         }
 
         function stopTimer() {
@@ -498,28 +618,32 @@
             }
             isRunning = false;
             startTime = null;
+            endTime = null;
             updateButtonStates();
+
+            stopSilentAudio();
+            releaseWakeLock();
+            bgStatus.textContent = '';
+            bgStatus.classList.remove('active');
         }
 
         function resetTimer() {
-            // 停止計時器
             if (timerId) {
                 clearInterval(timerId);
                 timerId = null;
             }
             isRunning = false;
             startTime = null;
-            
-            // 重置為工作模式
+            endTime = null;
+
             isWorkMode = true;
             timeLeft = WORK_TIME;
             totalDuration = WORK_TIME;
-            
+
             statusText.textContent = "選擇工作或休息模式";
             document.title = "森の時 | 專注計時";
             timerDisplay.textContent = formatTime(timeLeft);
-            
-            // 重置視覺
+
             teaCup.style.opacity = 0;
             stem.setAttribute('y2', 160);
             leaves.forEach(l => {
@@ -533,27 +657,31 @@
 
             progressBar.style.width = '0%';
             body.classList.remove('rest-mode');
-            
+
             updateButtonStates();
+
+            // 停止背景保活
+            stopSilentAudio();
+            releaseWakeLock();
+            bgStatus.textContent = '';
+            bgStatus.classList.remove('active');
         }
 
         function updateButtonStates() {
-            // 當計時器運行時，禁用模式選擇按鈕
             btnWork.disabled = isRunning;
             btnRest.disabled = isRunning;
         }
 
-        // --- 事件監聽 ---
-        btnWork.addEventListener('click', function() {
-            startTimer(true);
-        });
+        // === 事件監聽 ===
+        btnWork.addEventListener('click', () => startTimer(true));
+        btnRest.addEventListener('click', () => startTimer(false));
+        btnReset.addEventListener('click', () => resetTimer());
 
-        btnRest.addEventListener('click', function() {
-            startTimer(false);
-        });
-
-        btnReset.addEventListener('click', function() {
-            resetTimer();
+        // Wake Lock 在頁面重新可見時自動重新取得
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && isRunning && !wakeLock) {
+                requestWakeLock();
+            }
         });
 
         // 初始載入
