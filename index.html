@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>森の時 | 專注計時</title>
+    <title>Steep | 專注計時</title>
     <!-- 字體 -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;500;700&display=swap" rel="stylesheet">
     <!-- FontAwesome 圖標 -->
@@ -173,7 +173,7 @@
     <main class="z-10 flex flex-col items-center w-full max-w-md px-6">
         
         <header class="text-center mb-6">
-            <h1 class="text-2xl font-light tracking-[0.2em] mb-2 opacity-90">森の時</h1>
+            <h1 class="text-2xl font-light tracking-[0.2em] mb-2 opacity-90">Steep</h1>
             <p id="status-text" class="text-sm font-medium opacity-60 tracking-widest transition-colors duration-1000">選擇工作或休息模式</p>
         </header>
 
@@ -535,14 +535,14 @@
 
             if (isWorkMode) {
                 statusText.textContent = "專注生長中...";
-                document.title = "森の時 | 專注工作";
+                document.title = "Steep | 專注工作";
                 playSchoolBell();
-                sendNotification('森の時 — 休息結束', '回來專注吧！開始 25 分鐘工作。');
+                sendNotification('Steep — 休息結束', '回來專注吧！開始 25 分鐘工作。');
             } else {
                 statusText.textContent = "喝口茶，休憩片刻";
-                document.title = "森の時 | 休息中";
+                document.title = "Steep | 休息中";
                 playKalimba();
-                sendNotification('森の時 — 工作完成', '辛苦了！休息 5 分鐘吧。');
+                sendNotification('Steep — 工作完成', '辛苦了！休息 5 分鐘吧。');
             }
 
             updateVisuals();
@@ -590,11 +590,11 @@
 
             if (workMode) {
                 statusText.textContent = "專注生長中...";
-                document.title = "森の時 | 專注工作";
+                document.title = "Steep | 專注工作";
                 playSchoolBell();
             } else {
                 statusText.textContent = "喝口茶，休憩片刻";
-                document.title = "森の時 | 休息中";
+                document.title = "Steep | 休息中";
                 playKalimba();
             }
 
@@ -641,7 +641,7 @@
             totalDuration = WORK_TIME;
 
             statusText.textContent = "選擇工作或休息模式";
-            document.title = "森の時 | 專注計時";
+            document.title = "Steep | 專注計時";
             timerDisplay.textContent = formatTime(timeLeft);
 
             teaCup.style.opacity = 0;
